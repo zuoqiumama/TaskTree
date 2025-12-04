@@ -196,6 +196,7 @@ class Agent(BaseAgent):
             sliced = text_label['sliced'] == 1
         return task_type, mrecep_target, object_target, parent_target, sliced
     
+    # TODO：用一次这个方法给出的规划作为prompt提示大模型给出更多可能的规划
     def make_plan(self,task_type, mrecep_target, object_target, parent_target, sliced):
         plans = []
         if task_type == 'look_at_obj_in_light':

@@ -2,6 +2,8 @@ __vscode__
 __pycache__
 *.pyc
 logs
+data/json_2.1.0
+weights/
 jupyter 
 notebook
 weights

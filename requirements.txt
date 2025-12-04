@@ -1,6 +1,20 @@
+# Core Simulator (Strict Version)
 ai2thor==2.1.0
+
+# Critical Dependency Stack for AI2-THOR 2.1.0 (DO NOT CHANGE)
+# These specific versions are required to avoid "ImportError: cannot import name 'escape' from 'jinja2'"
+# and "SocketException" caused by newer Werkzeug versions.
+werkzeug==0.16.1
+flask==1.1.2
+Jinja2==2.11.3
+MarkupSafe==1.1.1
+itsdangerous==1.1.0
+
+# Deep Learning
 torch==1.13.0
 torchvision==0.14.0
+
+# Utilities & Visualization
 tensorboardX
 tensorboard
 numpy
@@ -16,8 +30,4 @@ matplotlib
 termcolor
 scikit-fmm
 scikit-image
-jupyter
-notebook
 imgviz
-Werkzeug
-Flask

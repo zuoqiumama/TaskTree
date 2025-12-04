@@ -1,0 +1,21 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug run.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/run.py",
+            "args": [
+                "--split", "tests_seen",
+                "--n_proc", "1",
+                "--x_display", ":0", 
+                "--name", "debug_experiment",
+                "--gpu", "1"
+            ],
+            "console": "integratedTerminal",
+            "subProcess": true,
+            "justMyCode": false
+        }
+    ]
+}

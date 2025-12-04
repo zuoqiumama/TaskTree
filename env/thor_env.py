@@ -8,6 +8,7 @@ from ai2thor.controller import Controller
 import gen.utils.image_util as image_util
 from gen.utils import game_util
 from gen.utils.game_util import get_objects_of_type, get_obj_of_type_closest_to_obj
+from models.rule_infer import infer_task_type_rule_based
 import os
 import ai2thor
 import platform
@@ -30,9 +31,10 @@ class ThorEnv(Controller):
                  player_screen_height=constants.DETECTION_SCREEN_HEIGHT,
                  player_screen_width=constants.DETECTION_SCREEN_WIDTH,
                  quality='MediumCloseFitShadows',
-                 build_path=constants.BUILD_PATH):
+                 build_path=constants.BUILD_PATH,
+                 headless=False):
 
-        super().__init__(quality=quality)
+        super().__init__(quality=quality, headless=headless)
         self.local_executable_path = build_path
         self.start(x_display=x_display,
                    player_screen_height=player_screen_height,
@@ -203,8 +205,13 @@ class ThorEnv(Controller):
         '''
         set the current task type (one of 7 tasks)
         '''
-        task_type = traj['task_type']
+        
+        task_type = traj.get('task_type')
+        if task_type is None:
+            descs = [ann['task_desc'] for ann in traj['turk_annotations']['anns']]
+            task_type = infer_task_type_rule_based(descs)
         self.task = get_task(task_type, traj, self, args, reward_type=reward_type, max_episode_length=max_episode_length)
+        22
 
     def step(self, action, smooth_nav=False):
         '''

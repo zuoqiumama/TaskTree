@@ -10,12 +10,12 @@ class BaseTask(object):
     base class for tasks
     '''
 
-    def __init__(self, traj, env, args, reward_type='sparse', max_episode_length=2000):
+    def __init__(self, traj, env, args, reward_type='sparse', max_episode_length=2000, task_type='base'):
         # settings
         self.traj = traj
         self.env = env
         self.args = args
-        self.task_type = self.traj['task_type']
+        self.task_type = task_type
         self.max_episode_length = max_episode_length
         self.reward_type = reward_type
         self.step_num = 0
@@ -471,6 +471,6 @@ def get_task(task_type, traj, env, args, reward_type='sparse', max_episode_lengt
 
     if task_class_str in globals():
         task = globals()[task_class_str]
-        return task(traj, env, args, reward_type=reward_type, max_episode_length=max_episode_length)
+        return task(traj, env, args, reward_type=reward_type, max_episode_length=max_episode_length, task_type=task_type)
     else:
         raise Exception("Invalid task_type %s" % task_class_str)

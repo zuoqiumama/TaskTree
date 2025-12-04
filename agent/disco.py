@@ -80,6 +80,7 @@ class Agent(BaseAgent):
         self.log(f'object_target: {object_target}')
         self.log(f'parent_target: {parent_target}')
         self.log(f'sliced: {sliced}')
+        # TODO： 换成task tree给出任务树
         plans = self.make_plan(task_type, mrecep_target, object_target, parent_target, sliced)    
         self.log('=========================')
         for p in plans:
@@ -95,7 +96,7 @@ class Agent(BaseAgent):
         self.rotate_left()
         self.perceive()
         
-        
+        # TODO：遍历task tree执行任务
         for subgoal, object_arg in plans:
             self.log(f'============================================ Subgoal: {subgoal} {object_arg}')
             if self.is_terminate():
