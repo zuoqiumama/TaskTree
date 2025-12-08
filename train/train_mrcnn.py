@@ -98,15 +98,24 @@ def main():
     print('>>> Train #Dataset %d #Dataloader %d' % (len(train_dataloader.dataset), len(train_dataloader) ))
     print('>>> ValidSeen #Dataset %d #Dataloader %d' % (len(vs_dataloader.dataset), len(vs_dataloader)  ))
     print('>>> ValidUnseen #Dataset %d #Dataloader %d' % (len(vu_dataloader.dataset), len(vu_dataloader)  ))
+    model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True, box_score_thresh=0.5)
     
-    model = torchvision.models.detection.maskrcnn_resnet50_fpn(
-        weights = None, weights_backbone = None, num_classes=train_dataloader.dataset.n_obj + 1, box_score_thresh = 0.5)
+    # Then we replace the head to match our number of classes
+    num_classes = train_dataloader.dataset.n_obj + 1
+    in_features = model.roi_heads.box_predictor.cls_score.in_features
+    model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(in_features, num_classes)
     
-    pretrained_ckpt_path = './weights/mrcnn_torchvision/maskrcnn_resnet50_fpn_coco-bf2d0c1e.pth'
-    predtrained_ckpt = torch.load(pretrained_ckpt_path)
-    predtrained_ckpt = {k:v for k,v in predtrained_ckpt.items() if 'roi_heads.box_predictor' not in k and 'roi_heads.mask_predictor.mask_fcn_logits' not in k}
-    load_result = model.load_state_dict(predtrained_ckpt, strict=False)
-    print(load_result)
+    in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
+    hidden_layer = 256
+    model.roi_heads.mask_predictor = torchvision.models.detection.mask_rcnn.MaskRCNNPredictor(in_features_mask, hidden_layer, num_classes)
+    # model = torchvision.models.detection.maskrcnn_resnet50_fpn(
+    #     weights = None, weights_backbone = None, num_classes=train_dataloader.dataset.n_obj + 1, box_score_thresh = 0.5)
+    
+    # pretrained_ckpt_path = './weights/mrcnn_torchvision/maskrcnn_resnet50_fpn_coco-bf2d0c1e.pth'
+    # predtrained_ckpt = torch.load(pretrained_ckpt_path)
+    # predtrained_ckpt = {k:v for k,v in predtrained_ckpt.items() if 'roi_heads.box_predictor' not in k and 'roi_heads.mask_predictor.mask_fcn_logits' not in k}
+    # load_result = model.load_state_dict(predtrained_ckpt, strict=False)
+    # print(load_result)
 
     model = model.to(device)
     if use_dp:

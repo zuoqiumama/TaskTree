@@ -63,7 +63,86 @@ unset HTTPS_PROXY
 python run.py --n_proc 1 --split valid_seen --x_display 0 --name debug_test --gpu []
 ```
 
+## 5. 感知模型训练全流程 (完整版)
 
+要重新训练感知模型（如 Mask R-CNN, Depth U-Net 等），需要按顺序执行以下步骤生成完整的数据集。
+
+**建议使用 `tmux` 在后台运行这些耗时任务。**
+
+### 第一步：生成场景导航网格 (Scene Parsing)
+这是生成导航可供性图（Affordance Navigation）的前置条件。
+```bash
+# 确保 X Server 已启动
+python train/scene_gen/gen_nav.py
+
+# (可选) 检查生成结果
+python train/scene_gen/check_scene_nav.py
+```
+
+### 第二步：生成基础训练数据 (RGB, Depth, Seg, Interaction)
+这一步通过回放专家轨迹生成大部分数据。
+*注意：不要生成 `tests_seen` 或 `tests_unseen`，因为它们没有专家计划。*
+
+```bash
+# 生成训练集 (Train)
+python train/traj_replay/generate.py \
+  --split train \
+  --save_rgb --save_seg --save_depth --save_aff \
+  --n_proc 4 --x_display 0 --gpu 0
+
+# 生成验证集 (Valid Seen)
+python train/traj_replay/generate.py \
+  --split valid_seen \
+  --save_rgb --save_seg --save_depth --save_aff \
+  --n_proc 4 --x_display 0 --gpu 0
+
+# 生成验证集 (Valid Unseen)
+python train/traj_replay/generate.py \
+  --split valid_unseen \
+  --save_rgb --save_seg --save_depth --save_aff \
+  --n_proc 4 --x_display 0 --gpu 0
+```
+
+### 第三步：生成导航可供性数据 (Affordance Navigation)
+这一步依赖第一步生成的场景网格和第二步生成的深度图。
+```bash
+# 补全训练集
+python train/traj_replay/generate_aff_nav.py --split train --n_proc 8 --gpu 0
+
+# 补全验证集
+python train/traj_replay/generate_aff_nav.py --split valid_seen --n_proc 8 --gpu 0
+python train/traj_replay/generate_aff_nav.py --split valid_unseen --n_proc 8 --gpu 0
+```
+
+### 第四步：验证数据完整性
+确保所有文件夹（rgb, depth, seg, interaction, navigation）都已生成且数量正确。
+```bash
+python train/traj_replay/check.py --split train
+python train/traj_replay/check.py --split valid_seen
+python train/traj_replay/check.py --split valid_unseen
+```
+*如果输出为空或没有 "Not OK"，则说明数据完整。*
+
+### 第五步：训练模型 (以 Mask R-CNN 为例)
+数据准备好后，即可开始训练。
+```bash
+# 测试训练流程 (Dry Run)
+python train/train_mrcnn.py \
+  --name test_mrcnn \
+  --gpu 0 \
+  --bz 4 \
+  --epoch 2 \
+  --report_freq 10 \
+  --test_freq 1 \
+  --save_freq 1
+
+# 正式训练
+python train/train_mrcnn.py \
+  --name my_mrcnn_model \
+  --gpu 0 \
+  --bz 8 \
+  --epoch 20
+```
 ## 5. 常见报错与修复
 
 *Q1: SocketException: The socket has been shut down (Unity Log) / Timeout (Python)*
