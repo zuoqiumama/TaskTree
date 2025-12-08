@@ -6,4 +6,6 @@ data/json_2.1.0
 weights/
 jupyter 
 notebook
-weights
+weights/
+data/replay/
+data/scene_parse/

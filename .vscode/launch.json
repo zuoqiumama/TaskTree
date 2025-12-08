@@ -7,7 +7,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/run.py",
             "args": [
-                "--split", "tests_seen",
+                "--split", "valid_seen",
                 "--n_proc", "1",
                 "--x_display", ":0", 
                 "--name", "debug_experiment",
