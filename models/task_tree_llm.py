@@ -27,14 +27,20 @@ ALLOWED_SUBTASKS = [
 def build_system_prompt() -> str:
     """System prompt for the planner LLM."""
     return (
-        "You are the high-level planner for an embodied agent. "
-        "You MUST respond with a JSON object containing the fields "
-        "task_description, structured_params, scene_objects, example_plan, candidate_plans. "
-        "candidate_plans must contain multiple alternative plans that differ from example_plan "
-        "but still achieve the task. Use ONLY these subtasks: "
-        + ", ".join(ALLOWED_SUBTASKS)
-        + ". Each plan is an ordered list of [Action, Arg] pairs. "
-        "Do not include commentary or code fences in the final output."
+        "You are the high-level planner for an embodied agent performing household tasks. "
+        "You MUST respond with a JSON object containing the fields: "
+        "task_description, structured_params, example_plan, candidate_plans. "
+        "\n\n"
+        "IMPORTANT GUIDELINES for candidate_plans:\n"
+        "1. candidate_plans should contain 2-3 ALTERNATIVE plans that achieve the SAME goal as example_plan.\n"
+        "2. Alternative plans should differ in STRATEGY (e.g., different intermediate objects or locations), "
+        "NOT by adding unnecessary extra steps.\n"
+        "3. Each plan must be MINIMAL - only include steps necessary to complete the task.\n"
+        "4. Do NOT add steps after the goal is achieved (e.g., no PutObject after ToggleObject in look_at_obj_in_light tasks).\n"
+        "\n"
+        "Use ONLY these subtasks: " + ", ".join(ALLOWED_SUBTASKS) + ".\n"
+        "Each plan is an ordered list of [Action, Arg] pairs.\n"
+        "Output JSON only, no commentary or code fences."
     )
 
 
@@ -44,16 +50,64 @@ def build_user_instruction(
     example_plan: List[List[str]],
 ) -> str:
     """Compose the user instruction asking for alternative plans."""
+    # Build task type specific hints
+    task_type = structured_params.get("task_type", "")
+    task_hints = ""
+    
+    if task_type == "look_at_obj_in_light":
+        task_hints = (
+            "\nTask Goal: Pick up an object and turn on a lamp while holding it. "
+            "The task is complete when the lamp is toggled on while holding the object. "
+            "Do NOT add any steps after ToggleObject."
+        )
+    elif task_type == "pick_and_place_simple":
+        task_hints = (
+            "\nTask Goal: Pick up an object and place it on a receptacle. "
+            "The task is complete when the object is placed. "
+            "Alternative plans might use different pickup strategies."
+        )
+    elif task_type == "pick_two_obj_and_place":
+        task_hints = (
+            "\nTask Goal: Pick up two objects of the same type and place them. "
+            "The task requires FindSecond and PickSecond to handle the second object."
+        )
+    elif task_type == "pick_and_place_with_movable_recep":
+        task_hints = (
+            "\nTask Goal: Pick up an object, place it in a movable receptacle, "
+            "then place the receptacle on a target location. Uses PutPickObject."
+        )
+    elif task_type == "pick_cool_then_place_in_recep":
+        task_hints = (
+            "\nTask Goal: Pick up an object, cool it in the fridge, then place it. "
+            "CoolObject must use 'Fridge' as argument."
+        )
+    elif task_type == "pick_heat_then_place_in_recep":
+        task_hints = (
+            "\nTask Goal: Pick up an object, heat it in the microwave, then place it. "
+            "HeatObject must use 'Microwave' as argument."
+        )
+    elif task_type == "pick_clean_then_place_in_recep":
+        task_hints = (
+            "\nTask Goal: Pick up an object, clean it at the sink, then place it. "
+            "CleanObject must use 'SinkBasin' as argument."
+        )
+    
     payload = {
         "task_description": task_description,
         "structured_params": structured_params,
         "example_plan": example_plan,
         "candidate_plans": [],
     }
+    
     return (
-        "Given the input JSON, fill candidate_plans with at least 2-3 feasible alternatives "
-        "that differ from example_plan. Output JSON only.\n\nInput:\n"
-        + json.dumps(payload, ensure_ascii=False, indent=2)
+        f"Generate alternative plans for this task.{task_hints}\n\n"
+        "Requirements:\n"
+        "1. Each alternative plan should achieve the SAME goal as example_plan.\n"
+        "2. Plans should be MINIMAL - no unnecessary steps.\n"
+        "3. Alternatives can differ in object choices (e.g., Knife vs ButterKnife) "
+        "or approach strategies, but must have the same end result.\n"
+        "4. Output 2-3 candidate_plans that are valid alternatives.\n\n"
+        "Input:\n" + json.dumps(payload, ensure_ascii=False, indent=2)
     )
 
 
@@ -135,6 +189,7 @@ class TaskNode:
         self.arg = arg
         self.children = []  # List of TaskNode
         self.count = 1  # How many plans go through this node
+        self.is_original_endpoint = False  # True if this is the last node of original plan
 
     def add_child(self, node):
         for child in self.children:
@@ -149,22 +204,102 @@ class TaskNode:
             "action": self.action,
             "arg": self.arg,
             "children": [c.to_dict() for c in self.children],
-            "count": self.count
+            "count": self.count,
+            "is_original_endpoint": self.is_original_endpoint
         }
 
-def build_task_tree(plans: List[List[List[str]]]) -> TaskNode:
+def build_task_tree(plans: List[List[List[str]]], original_plan_index: int = 0) -> TaskNode:
     """
     Builds a task tree from a list of plans.
     Each plan is a list of [action, arg] pairs.
+    
+    The original plan (at original_plan_index) is guaranteed to be a single path
+    where the last node is a leaf node (marked with is_original_endpoint=True).
+    
+    Candidate plans can share prefix with original plan, but if they have
+    additional steps after the original plan's endpoint, those steps form
+    a new branch from ROOT (not from the endpoint).
     """
     root = TaskNode("ROOT", None)
-    for plan in plans:
-        current_node = root
-        for step in plan:
-            if len(step) == 2:
-                action, arg = step
-                new_node = TaskNode(action, arg)
-                current_node = current_node.add_child(new_node)
+    
+    if not plans:
+        return root
+    
+    original_plan = plans[original_plan_index]
+    original_path_length = len(original_plan)
+    
+    # First, add the original plan as a single path
+    current_node = root
+    original_path_nodes = [root]  # Track all nodes in original path
+    for i, step in enumerate(original_plan):
+        if len(step) == 2:
+            action, arg = step
+            new_node = TaskNode(action, arg)
+            current_node = current_node.add_child(new_node)
+            original_path_nodes.append(current_node)
+            # Mark the last node as original endpoint
+            if i == len(original_plan) - 1:
+                current_node.is_original_endpoint = True
+    
+    # Then, add candidate plans
+    for plan_idx, plan in enumerate(plans):
+        if plan_idx == original_plan_index:
+            continue  # Skip the original plan
+        
+        # Find where this plan diverges from the original plan
+        diverge_point = 0
+        for i, step in enumerate(plan):
+            if i < original_path_length and len(step) == 2:
+                orig_step = original_plan[i]
+                if step[0] == orig_step[0] and step[1] == orig_step[1]:
+                    diverge_point = i + 1
+                else:
+                    break
+            else:
+                break
+        
+        # If the plan is longer than original and shares the entire original path,
+        # we need to handle the extra steps as a separate branch from ROOT
+        if diverge_point >= original_path_length and len(plan) > original_path_length:
+            # This candidate plan extends beyond original plan
+            # Add the extra steps as a completely new path from ROOT
+            # to avoid adding children to the original endpoint
+            current_node = root
+            for step in plan:
+                if len(step) == 2:
+                    action, arg = step
+                    # Check if we should follow existing path or create new
+                    existing = None
+                    for child in current_node.children:
+                        if child.action == action and child.arg == arg:
+                            # Don't reuse the original endpoint node
+                            if not child.is_original_endpoint:
+                                existing = child
+                            break
+                    
+                    if existing and not existing.is_original_endpoint:
+                        existing.count += 1
+                        current_node = existing
+                    else:
+                        new_node = TaskNode(action, arg)
+                        current_node.children.append(new_node)
+                        current_node = new_node
+        else:
+            # Normal case: plan diverges before or at the original endpoint
+            # Start from the divergence point
+            if diverge_point > 0:
+                current_node = original_path_nodes[diverge_point]
+            else:
+                current_node = root
+            
+            for i, step in enumerate(plan):
+                if i < diverge_point:
+                    continue  # Skip shared prefix
+                if len(step) == 2:
+                    action, arg = step
+                    new_node = TaskNode(action, arg)
+                    current_node = current_node.add_child(new_node)
+    
     return root
 
 def print_tree(node: TaskNode, level=0):

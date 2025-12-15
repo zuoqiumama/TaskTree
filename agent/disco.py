@@ -138,13 +138,19 @@ class Agent(BaseAgent):
 
     def execute_task_node(self, node):
         if node.action == "ROOT":
-            # Try children
+            # Try children in order (original plan's path is first)
             for child in node.children:
                 if self.execute_task_node(child):
                     return True
             return False
         
         self.log(f'============================================ Subgoal: {node.action} {node.arg}')
+        
+        # Check if task is already complete (goal satisfied)
+        if self.is_goal_satisfied():
+            self.log("Task goal already satisfied, stopping execution.")
+            return True
+        
         if self.is_terminate():
             return True
 
@@ -177,12 +183,23 @@ class Agent(BaseAgent):
         if not success:
             self.log(f"Subgoal {node.action} failed.")
             return False
+        
+        # Check if task goal is satisfied after completing this subgoal
+        if self.is_goal_satisfied():
+            self.log(f"Task goal satisfied after {node.action}, stopping execution.")
+            return True
+        
+        # If this is the original plan's endpoint, return success
+        # This ensures the original plan is always a complete path
+        # if node.is_original_endpoint:
+        #     self.log(f"Reached original plan endpoint after {node.action}.")
+        #     return True
             
-        # If leaf, we are done
+        # If leaf node (no children), we are done with this path
         if not node.children:
             return True
             
-        # Try children
+        # Try children (alternative continuations)
         for child in node.children:
             if self.execute_task_node(child):
                 return True

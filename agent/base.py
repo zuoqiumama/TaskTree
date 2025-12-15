@@ -101,6 +101,13 @@ class Agent:
             return True
         return False
     
+    def is_goal_satisfied(self):
+        """Check if the task goal has been satisfied."""
+        try:
+            return self.env.get_goal_satisfied()
+        except:
+            return False
+    
     def va_interact(self, action, interact_mask=None, smooth_nav=None):
         if smooth_nav is None:
             smooth_nav = self.args.smooth_nav
