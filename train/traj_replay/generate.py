@@ -1,5 +1,13 @@
-from utils import arguments, utils
+
+import sys
 import os
+# 获取当前脚本的绝对路径
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# 获取项目根目录 (假设 train/scene_gen/ 是两层深度，根据实际情况调整 '../..')
+project_root = os.path.abspath(os.path.join(current_dir, "../../"))
+# 将根目录加入系统路径
+sys.path.append(project_root)
+from utils import arguments, utils
 import torch.multiprocessing as mp
 import importlib
 from env import thor_env

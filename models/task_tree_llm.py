@@ -127,3 +127,48 @@ def validate_plan(plan: List[List[str]], example_plan: List[List[str]]) -> bool:
 def filter_valid_plans(plans: List[List[List[str]]], example_plan: List[List[str]]) -> List[List[List[str]]]:
     """Return only valid plans."""
     return [p for p in plans if validate_plan(p, example_plan)]
+
+
+class TaskNode:
+    def __init__(self, action, arg):
+        self.action = action
+        self.arg = arg
+        self.children = []  # List of TaskNode
+        self.count = 1  # How many plans go through this node
+
+    def add_child(self, node):
+        for child in self.children:
+            if child.action == node.action and child.arg == node.arg:
+                child.count += 1
+                return child
+        self.children.append(node)
+        return node
+
+    def to_dict(self):
+        return {
+            "action": self.action,
+            "arg": self.arg,
+            "children": [c.to_dict() for c in self.children],
+            "count": self.count
+        }
+
+def build_task_tree(plans: List[List[List[str]]]) -> TaskNode:
+    """
+    Builds a task tree from a list of plans.
+    Each plan is a list of [action, arg] pairs.
+    """
+    root = TaskNode("ROOT", None)
+    for plan in plans:
+        current_node = root
+        for step in plan:
+            if len(step) == 2:
+                action, arg = step
+                new_node = TaskNode(action, arg)
+                current_node = current_node.add_child(new_node)
+    return root
+
+def print_tree(node: TaskNode, level=0):
+    indent = "  " * level
+    print(f"{indent}- {node.action} ({node.arg}) [count={node.count}]")
+    for child in node.children:
+        print_tree(child, level + 1)

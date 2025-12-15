@@ -1,7 +1,14 @@
 import numpy as np
 import json
 import pickle as pkl
+import sys
 import os
+# 获取当前脚本的绝对路径
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# 获取项目根目录 (假设 train/scene_gen/ 是两层深度，根据实际情况调整 '../..')
+project_root = os.path.abspath(os.path.join(current_dir, "../../"))
+# 将根目录加入系统路径
+sys.path.append(project_root)
 from utils import utils
 from collections import defaultdict
 import threading
@@ -12,8 +19,8 @@ import copy
 
 
 
-def main(rank):
-    env = ThorEnv()
+def main(rank, args):
+    env = ThorEnv(x_display=args.display)
     while True:
         lock.acquire()
         if len(all_scene_numbers) >0:
@@ -90,7 +97,9 @@ def main(rank):
                 valid_pts.append([x,z])
         official_nav_pts = np.load(f'./gen/layouts/FloorPlan{scene_num}-layout.npy')
         print(f"scene {scene_name}. reachable {len(action_return)}. check_valid {len(valid_pts)}. AlfredRelease {len(official_nav_pts)}")
-        with open(f'./data/scene_parse/nav/{scene_name}.pkl','wb') as f:
+        save_path = f'./data/scene_parse/nav/{scene_name}.pkl'
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        with open(save_path,'wb') as f:
             pkl.dump(valid_pts,f)
 
 if __name__ == '__main__':
@@ -99,6 +108,7 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser()
     parser.add_argument('--n_proc',default=1,type=int)
+    parser.add_argument('--display',default=0,type=str)
     parser.add_argument('--scene', default=None,type=int,nargs='*')
     args = parser.parse_args()
     
@@ -110,11 +120,11 @@ if __name__ == '__main__':
     
     
     if args.n_proc == 1:
-        main(0)
+        main(0, args)
     else:
         threads = []
         for n in range(args.n_proc):
-            thread = threading.Thread(target=main,args=(n,))
+            thread = threading.Thread(target=main,args=(n,args,))
             threads.append(thread)
             thread.start()
         

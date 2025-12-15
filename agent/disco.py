@@ -19,6 +19,13 @@ import cv2
 from skimage.morphology import binary_dilation
 from skimage.measure import label as connectivity_label
 from models.resnet_policy import FinePolicyNet
+from models.llm import LLM
+from models.task_tree_llm import (
+    build_system_prompt,
+    build_user_instruction,
+    parse_llm_response,
+    build_task_tree
+)
 
 
 class Agent(BaseAgent):
@@ -82,10 +89,40 @@ class Agent(BaseAgent):
         self.log(f'sliced: {sliced}')
         # TODO： 换成task tree给出任务树
         plans = self.make_plan(task_type, mrecep_target, object_target, parent_target, sliced)    
-        self.log('=========================')
-        for p in plans:
-            self.log(p)
-        self.log('=========================')
+        task_desc = ""
+        try:
+            if 'turk_annotations' in self.task_info:
+                 task_desc = self.task_info['turk_annotations']['anns'][self.task_info['repeat_idx']]['task_desc']
+        except:
+            pass
+            
+        structured_params = {
+            "task_type": task_type,
+            "mrecep_target": mrecep_target,
+            "object_target": object_target,
+            "parent_target": parent_target,
+            "sliced": sliced
+        }
+        
+        api_key = os.environ.get("SILICONFLOW_API_KEY", "sk-xwucfzugonxtxwpuopkwufuverlbwvurulsvgwyrxqjrqjuq")
+        
+        llm = LLM(api_key=api_key, system_prompt=build_system_prompt())
+        user_ins = build_user_instruction(task_desc, structured_params, plans)
+        
+        self.log("Querying LLM for alternative plans...")
+        response = llm.query(user_ins)
+        
+        candidate_plans = []
+        if response:
+            try:
+                parsed = parse_llm_response(response)
+                candidate_plans = parsed.get("candidate_plans", [])
+                self.log(f"LLM returned {len(candidate_plans)} candidate plans.")
+            except Exception as e:
+                self.log(f"Failed to parse LLM response: {e}")
+        
+        all_plans = [plans] + candidate_plans
+        self.task_tree = build_task_tree(all_plans)
         
         self.look_down()
         self.perceive()
@@ -766,3 +803,4 @@ class Agent(BaseAgent):
                 break
             else:
                 raise RuntimeError('Pick Second Fail')
+            

@@ -128,20 +128,19 @@ python train/traj_replay/check.py --split valid_unseen
 ```bash
 # 测试训练流程 (Dry Run)
 python train/train_mrcnn.py \
-  --name test_mrcnn \
-  --gpu 0 \
+  --name my_mrcnn_model_8gpu \
+  --gpu 0 1 2 3 4 5 6 7 \
   --bz 4 \
-  --epoch 2 \
-  --report_freq 10 \
-  --test_freq 1 \
-  --save_freq 1
+  --epoch 2\
+  --num_workers 64
 
 # 正式训练
 python train/train_mrcnn.py \
-  --name my_mrcnn_model \
-  --gpu 0 \
-  --bz 8 \
-  --epoch 20
+  --name my_mrcnn_model_8gpu \
+  --gpu 0 1 2 3 4 5 6 7 \
+  --bz 4 \
+  --epoch 20\
+  --num_workers 64
 ```
 ## 5. 常见报错与修复
 
