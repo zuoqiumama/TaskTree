@@ -9,10 +9,10 @@ import copy
 import torch # 添加 torch 导入
 import gc    # 添加 gc 导入
 
-for k in ['http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'all_proxy', 'ALL_PROXY']:
-    if k in os.environ:
-        print(f"Removing proxy env var: {k}")
-        del os.environ[k]
+# for k in ['http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'all_proxy', 'ALL_PROXY']:
+#     if k in os.environ:
+#         print(f"Removing proxy env var: {k}")
+#         del os.environ[k]
 
 def work(args, tasks_queue, lock):
     n_tasks = tasks_queue.qsize()

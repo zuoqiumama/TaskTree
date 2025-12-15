@@ -84,6 +84,7 @@ def parse_args():
     parser.add_argument('--report_freq', default=1,type= int)
     parser.add_argument('--test_freq',   default=1,type= int)
     parser.add_argument('--cosine',     default=False,action='store_true')
+    parser.add_argument('--model_config', default=None, type=str, help='Path to model config file (e.g., for YOLO)')
 
 
     ############# sam train

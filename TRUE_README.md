@@ -62,6 +62,14 @@ unset HTTPS_PROXY
 ```bash
 python run.py --n_proc 1 --split valid_seen --x_display 0 --name debug_test --gpu []
 ```
+## Evaluation
+
+Last, you can evaluate the performances via
+
+```bash
+python evaluate.py --name [EXP_NAME] --split valid_unseen
+python evaluate.py --name [EXP_NAME] --split valid_seen
+```
 
 ## 5. 感知模型训练全流程 (完整版)
 
@@ -135,12 +143,7 @@ python train/train_mrcnn.py \
   --num_workers 64
 
 # 正式训练
-python train/train_mrcnn.py \
-  --name my_mrcnn_model_8gpu \
-  --gpu 0 1 2 3 4 5 6 7 \
-  --bz 4 \
-  --epoch 20\
-  --num_workers 64
+python train/train_yolo.py --name train_yolo8 --model_config /home/cigit_lg/lzh/TaskTree/models/segmentation/yolo/yolov8-seg.yaml --gpu 2 4 5 6 --bz 4 --epoch 20 --num_workers 64
 ```
 ## 5. 常见报错与修复
 

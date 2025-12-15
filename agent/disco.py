@@ -134,33 +134,61 @@ class Agent(BaseAgent):
         self.perceive()
         
         # TODO：遍历task tree执行任务
-        for subgoal, object_arg in plans:
-            self.log(f'============================================ Subgoal: {subgoal} {object_arg}')
-            if self.is_terminate():
-                break
-            self.look_down()
-            if subgoal == 'PickupObject':
-                self.pickup(object_arg)
-            elif subgoal == 'ToggleObject':
-                self.toggle(object_arg)
-            elif subgoal == 'PutObject':
-                self.put(object_arg)
-            elif subgoal == 'PutPickObject':
-                self.putpick(object_arg)
-            elif subgoal == 'SliceObject':
-                self.slice(object_arg)
-            elif subgoal == 'CoolObject':
-                self.cool(object_arg)
-            elif subgoal == 'HeatObject':
-                self.heat(object_arg)
-            elif subgoal == 'CleanObject':
-                self.clean(object_arg)
-            elif subgoal == 'FindSecond':
-                self.find_second(object_arg)
-            elif subgoal == 'PickSecond':
-                self.pick_second(object_arg)
-            else:
-                raise NotImplementedError(subgoal)
+        self.execute_task_node(self.task_tree)
+
+    def execute_task_node(self, node):
+        if node.action == "ROOT":
+            # Try children
+            for child in node.children:
+                if self.execute_task_node(child):
+                    return True
+            return False
+        
+        self.log(f'============================================ Subgoal: {node.action} {node.arg}')
+        if self.is_terminate():
+            return True
+
+        self.look_down()
+        
+        success = False
+        if node.action == 'PickupObject':
+            success = self.pickup(node.arg)
+        elif node.action == 'ToggleObject':
+            success = self.toggle(node.arg)
+        elif node.action == 'PutObject':
+            success = self.put(node.arg)
+        elif node.action == 'PutPickObject':
+            success = self.putpick(node.arg)
+        elif node.action == 'SliceObject':
+            success = self.slice(node.arg)
+        elif node.action == 'CoolObject':
+            success = self.cool(node.arg)
+        elif node.action == 'HeatObject':
+            success = self.heat(node.arg)
+        elif node.action == 'CleanObject':
+            success = self.clean(node.arg)
+        elif node.action == 'FindSecond':
+            success = self.find_second(node.arg)
+        elif node.action == 'PickSecond':
+            success = self.pick_second(node.arg)
+        else:
+            raise NotImplementedError(node.action)
+            
+        if not success:
+            self.log(f"Subgoal {node.action} failed.")
+            return False
+            
+        # If leaf, we are done
+        if not node.children:
+            return True
+            
+        # Try children
+        for child in node.children:
+            if self.execute_task_node(child):
+                return True
+        
+        self.log(f"All children of {node.action} failed.")
+        return False
     
     def obj_str_to_ambigious_class(self,obj_str):
         if obj_str == 'AnyKnife':
@@ -598,7 +626,7 @@ class Agent(BaseAgent):
                          
     def put(self,object_arg):
         if not object_arg:
-            return
+            return False
         object_class =self.obj_str_to_ambigious_class(object_arg)
         affordance_class = self.affordance2index['PutObject']
         success = False
@@ -621,11 +649,12 @@ class Agent(BaseAgent):
                 
             if success:
                 self.picked_object = None
-                break
+                return True
+        return False
                
     def pickup(self, object_arg):
         if not object_arg:
-            return
+            return False
         
         affordance_class = self.affordance2index['PickupObject']
         object_class =self.obj_str_to_ambigious_class(object_arg)
@@ -633,11 +662,12 @@ class Agent(BaseAgent):
             success, _, _, _, _ = self.va_interact('PickupObject', mask)
             if success:
                 self.picked_object = label
-                break
+                return True
+        return False
 
     def putpick(self,object_arg):
         if not object_arg:
-            return
+            return False
         object_class =self.obj_str_to_ambigious_class(object_arg)
         for mask ,label in self.common(object_class):
             success, _, _, error, _ = self.va_interact('PutObject', mask)
@@ -647,22 +677,24 @@ class Agent(BaseAgent):
             success, _, _, error, _ = self.va_interact('PickupObject', mask)
             if success:
                 self.picked_object = label
-                break
+                return True
+        return False
             
     def slice(self,object_arg):
         if not object_arg:
-            return
+            return False
         affordance_class = self.affordance2index['SliceObject']
         object_class =self.obj_str_to_ambigious_class(object_arg)
         for mask ,label in self.common(object_class, affordance_class):
             success, _, _, error, _ = self.va_interact('SliceObject', mask)
             if success:
                 self.perceive()
-                break
+                return True
+        return False
 
     def toggle(self, object_arg):
         if not object_arg:
-            return
+            return False
         
         affordance_class = self.affordance2index['ToggleObject']
         object_class =self.obj_str_to_ambigious_class(object_arg)
@@ -676,14 +708,14 @@ class Agent(BaseAgent):
                     object_arg = [self.object_list[o] for o in object_class]
                     self.log(f'>>>>>>>>>>>>Remain {object_class} {object_arg} <<<<<<<<<<<<')
                     assert len(object_class) == 1
-                    self.toggle(object_arg)
-                    return
+                    return self.toggle(object_arg)
             if success:
-                break
+                return True
+        return False
     
     def cool(self, object_arg):
         if not object_arg:
-            return
+            return False
         assert object_arg == 'Fridge'
         
         affordance_class = self.affordance2index['CoolObject']
@@ -708,11 +740,12 @@ class Agent(BaseAgent):
             _, _, _, _, _ = self.va_interact('CloseObject', fridge_mask)
             
             self.picked_object = orig_pick
-            break
+            return True
+        return False
     
     def heat(self, object_arg):
         if not object_arg:
-            return
+            return False
         assert object_arg == 'Microwave'
         
         affordance_class = self.affordance2index['HeatObject']
@@ -739,11 +772,12 @@ class Agent(BaseAgent):
             _, _, _, _, _ = self.va_interact('CloseObject', microwave_mask)
             
             self.picked_object = orig_pick
-            break
+            return True
+        return False
        
     def clean(self, object_arg):
         if not object_arg:
-            return
+            return False
         assert object_arg == 'SinkBasin'
         
         affordance_class = self.affordance2index['CleanObject']
@@ -772,21 +806,23 @@ class Agent(BaseAgent):
             _, _, _, _, _ = self.va_interact('PickupObject', self.segementation_frame['masks'][object_idx].cpu().numpy())
             
             self.picked_object = orig_pick
-            break
+            return True
+        return False
 
     def find_second(self,object_arg):
         if not object_arg:
-            return
+            return False
         object_class =self.obj_str_to_ambigious_class(object_arg)
         for mask ,label in self.common(object_class):
             self.second_find = True
             self.second_pose = self.pose.copy()
             self.second_mask = mask.copy()
-            return
+            return True
+        return False
             
     def pick_second(self,object_arg):
         if not object_arg:
-            return
+            return False
         
         object_class =self.obj_str_to_ambigious_class(object_arg)
         while True:
@@ -800,7 +836,6 @@ class Agent(BaseAgent):
             success, _, _, _, _ = self.va_interact('PickupObject', self.second_mask)
             if success:
                 self.picked_object = object_class[0]
-                break
+                return True
             else:
                 raise RuntimeError('Pick Second Fail')
-            

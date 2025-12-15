@@ -1,6 +1,14 @@
 import cv2
 import numpy as np
 import torch,torchvision
+import sys
+import os
+# 获取当前脚本的绝对路径
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# 获取项目根目录 (假设 train/scene_gen/ 是两层深度，根据实际情况调整 '../..')
+project_root = os.path.abspath(os.path.join(current_dir, "../"))
+# 将根目录加入系统路径
+sys.path.append(project_root)
 from models.segmentation.sam.sam_wrapper import SamSegTrainWrapper
 from models.segmentation.sam.sam_dp_wrapper import SamDataParallelWrapper
 from datasets.segmentation_dataset import build_seg_dataloader
@@ -16,7 +24,7 @@ import os
 import logging
 from torch.nn.parallel._functions import Scatter
 from tensorboardX import SummaryWriter
-from .train_mrcnn import MRCNNDataParallelWrapper
+from train_mrcnn import MRCNNDataParallelWrapper
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 
@@ -67,6 +75,8 @@ def main():
         all_pred, all_gt = [], []
         for i, blobs in enumerate(dataloader):
             images, targets = blobs
+            if len(images) == 0:
+                continue
             images  = [img.to(device) for img in images]
             with torch.no_grad():
                 with torch.cuda.amp.autocast(enabled=args.amp):

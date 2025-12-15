@@ -161,7 +161,8 @@ class AlfredSegImageDataset(AlfredSegPointDataset):
     @staticmethod
     def collate_fn(blobs):
         blobs = [(img,tgt) for img,tgt in blobs if tgt is not None]
-        assert len(blobs) > 0
+        if len(blobs) == 0:
+            return [], []
         images, targets = zip(*blobs)
         # images = torch.stack(images,0)
         images = list(images)
