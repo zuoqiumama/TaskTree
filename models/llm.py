@@ -33,7 +33,8 @@ class LLM:
         n: int = 1, 
         enable_thinking: bool = False,
         max_tokens: int = 2048,
-        temperature: float = 0.5
+        temperature: float = 0.5,
+        max_retries: int = 10
     ) -> Union[str, Any, None]:
         """
         查询大模型，包含重试机制 (基于 query_llm 实现)
@@ -45,6 +46,7 @@ class LLM:
             enable_thinking: 是否启用思考能力
             max_tokens: 最大生成长度
             temperature: 温度
+            max_retries: 最大重试次数
             
         Returns:
             如果 n=1 返回内容字符串，否则返回完整 response 对象。失败返回 None。
@@ -82,11 +84,11 @@ class LLM:
                 break 
             except Exception as e:
                 try_times += 1
-                print(f"[尝试 {try_times}/10] LLM查询失败: {type(e).__name__}: {str(e)}")
+                print(f"[尝试 {try_times}/{max_retries}] LLM查询失败: {type(e).__name__}: {str(e)}")
                 time.sleep(5)
             
-            if try_times >= 10:
-                print(f"[警告!!!!!] LLM查询尝试次数达到10次，最后一次错误: {type(e).__name__}: {str(e)}")
+            if try_times >= max_retries:
+                print(f"[警告!!!!!] LLM查询尝试次数达到{max_retries}次，最后一次错误: {type(e).__name__}: {str(e)}")
                 return None
 
         # 循环结束后处理返回值
