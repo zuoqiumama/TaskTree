@@ -104,7 +104,7 @@ class Agent(BaseAgent):
             "sliced": sliced
         }
         
-        api_key = os.environ.get("SILICONFLOW_API_KEY", "sk-xwucfzugonxtxwpuopkwufuverlbwvurulsvgwyrxqjrqjuq")
+        api_key = os.environ.get("SILICONFLOW_API_KEY", "")
         
         llm = LLM(api_key=api_key, system_prompt=build_system_prompt())
         user_ins = build_user_instruction(task_desc, structured_params, plans)
