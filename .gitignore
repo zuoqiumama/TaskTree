@@ -9,3 +9,7 @@ notebook
 weights/
 data/replay/
 data/scene_parse/
+data/
+datasets/
+runs/
+

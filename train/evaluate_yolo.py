@@ -46,7 +46,7 @@ def evaluate_yolo_on_alfred(model, args, logger, splits=['valid_seen', 'valid_un
     device = args.gpu[0] if isinstance(args.gpu, list) else args.gpu
     
     # 使用与MRCNN相同的数据集设置
-    args.image_size = 300
+    args.image_size = 320
     args.mask_size = 300
     
     results_all = {}

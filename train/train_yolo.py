@@ -143,8 +143,8 @@ def evaluate_yolo_model(model, args, logger):
     device = torch.device(f'cuda:{args.gpu[0]}')
     
     # 使用原始数据集格式进行评估，以便与MRCNN结果对比
-    args.image_size = 300
-    args.mask_size = 300
+    args.image_size = 320
+    args.mask_size = 320
     vs_dataloader = build_seg_dataloader('AlfredSegImageDataset', split='valid_seen', args=args)
     vu_dataloader = build_seg_dataloader('AlfredSegImageDataset', split='valid_unseen', args=args)
     
@@ -218,7 +218,7 @@ def main():
     logger = utils.build_logger(filepath=os.path.join(logging_dir, 'log.txt'), verbose=True)
     
     # 设置默认参数
-    if not hasattr(args, 'image_size') or args.image_size == 300:
+    if not hasattr(args, 'image_size'):
         args.image_size = 640  # YOLO默认输入尺寸
     
     logger.info(f'Training YOLO Segmentation Model')

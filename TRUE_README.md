@@ -145,6 +145,11 @@ python train/train_mrcnn.py \
 # 正式训练
 python train/train_yolo.py --name train_yolo8 --model_config /home/cigit_lg/lzh/TaskTree/models/segmentation/yolo/yolov8-seg.yaml --gpu 2 4 5 6 --bz 4 --epoch 20 --num_workers 64
 ```
+
+# 评估感知模型
+```bash
+python train/evaluate_yolo.py --resume logs/train_yolo8/weights/best.pt --gpu 0 --name evaluate_
+```
 ## 5. 常见报错与修复
 
 *Q1: SocketException: The socket has been shut down (Unity Log) / Timeout (Python)*
