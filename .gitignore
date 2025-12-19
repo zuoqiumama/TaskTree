@@ -1,6 +1,7 @@
 __vscode__
 __pycache__
 *.pyc
+
 logs
 data/json_2.1.0
 weights/
@@ -12,4 +13,13 @@ data/scene_parse/
 data/
 datasets/
 runs/
+
+# Ignore all data except splits and download_data.sh
+data/*
+!data/splits/
+!data/download_data.sh
+
+# Ignore all datasets except python code
+datasets/*
+!datasets/*.py
 
