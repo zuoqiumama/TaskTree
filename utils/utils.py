@@ -203,7 +203,14 @@ def get_alfred_metrics(tasks, results):
         NALL = len(results)
         results = [a for a in results if a is not None]
         if len(results) == 0:
-            return {}
+            return {
+                'N' : 0,
+                'NALL' : NALL,
+                'SR' : 0.0,
+                'GC' : 0.0,
+                'PLW_SR' : 0.0,
+                'PLW_GC' : 0.0
+            }
         
         N = len(results)
         S = sum([a['success'] for a in results])
@@ -213,16 +220,20 @@ def get_alfred_metrics(tasks, results):
         GC = GC0 / GC1
         
         TOTAL_LEN = sum([a['path_len_expert'] for a in results]) 
-        # PLW_SR = sum([a['success'] * min(1, a['path_len_expert']/a['path_len_agent']) * a['path_len_expert'] for a in results]) / TOTAL_LEN
-        # PLW_GC = sum([a['completed_goal_conditions'] / a['total_goal_conditions'] * min(1, a['path_len_expert']/a['path_len_agent']) * a['path_len_expert'] for a in results]) / TOTAL_LEN
+        if TOTAL_LEN == 0:
+            PLW_SR = 0.0
+            PLW_GC = 0.0
+        else:
+            PLW_SR = sum([a['success'] * (min(1, a['path_len_expert']/a['path_len_agent']) if a['path_len_agent'] > 1e-6 else 1) * a['path_len_expert'] for a in results]) / TOTAL_LEN
+            PLW_GC = sum([a['completed_goal_conditions'] / a['total_goal_conditions'] * (min(1, a['path_len_expert']/a['path_len_agent']) if a['path_len_agent'] > 1e-6 else 1) * a['path_len_expert'] for a in results]) / TOTAL_LEN
         
         ret = {
             'N' : N,
             'NALL' : NALL,
             'SR' : SR * 100,
             'GC' : GC * 100,
-            # 'PLW_SR' : PLW_SR * 100,
-            # 'PLW_GC' : PLW_GC * 100
+            'PLW_SR' : PLW_SR * 100,
+            'PLW_GC' : PLW_GC * 100
         }
         return ret
         
@@ -244,11 +255,11 @@ def get_alfred_metrics(tasks, results):
                 pass
             else:
                 key = key + f" [{metrics['N']}/{metrics['NALL']}]"
-                print(f"{key:45s} SR={metrics['SR']:.2f} GC={metrics['GC']:.2f} ")
+                print(f"{key:45s} SR={metrics['SR']:.2f} GC={metrics['GC']:.2f} PLW_SR={metrics['PLW_SR']:.2f} PLW_GC={metrics['PLW_GC']:.2f}")
     
     metrics = _get_metrics(results)
     key = f"ALL [{metrics['N']}/{metrics['NALL']}]"
-    print(f"{key:45s} SR={metrics['SR']:.2f} GC={metrics['GC']:.2f} ")
+    print(f"{key:45s} SR={metrics['SR']:.2f} GC={metrics['GC']:.2f} PLW_SR={metrics['PLW_SR']:.2f} PLW_GC={metrics['PLW_GC']:.2f}")
     
     
 

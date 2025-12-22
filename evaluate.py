@@ -13,7 +13,6 @@ if __name__ == '__main__':
     for t in tasks:
         result = os.path.join(logging_dir, t['task_index'], '_result.json')
         if os.path.exists(result):
-
             result = json.load(open(result))
         else:
             result = None
