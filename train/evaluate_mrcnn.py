@@ -11,6 +11,7 @@ project_root = os.path.abspath(os.path.join(current_dir, "../"))
 sys.path.append(project_root)
 from models.segmentation.sam.sam_wrapper import SamSegTrainWrapper
 from models.segmentation.sam.sam_dp_wrapper import SamDataParallelWrapper
+from models.segmentation.maskrcnn.custom_maskrcnn import get_custom_maskrcnn
 from datasets.segmentation_dataset import build_seg_dataloader
 from utils import utils, arguments
 import tqdm
@@ -50,8 +51,17 @@ def main():
     print('>>> ValidSeen #Dataset %d #Dataloader %d' % (len(vs_dataloader.dataset), len(vs_dataloader)  ))
     print('>>> ValidUnseen #Dataset %d #Dataloader %d' % (len(vu_dataloader.dataset), len(vu_dataloader)  ))
     
-    model = torchvision.models.detection.maskrcnn_resnet50_fpn(
-        weights = None, weights_backbone = None, num_classes=vs_dataloader.dataset.n_obj + 1, box_score_thresh = 0.5)
+    num_classes = vs_dataloader.dataset.n_obj + 1
+    model = get_custom_maskrcnn(num_classes=num_classes, 
+                                use_cbam=args.use_cbam, 
+                                use_scconv=args.use_scconv, 
+                                use_proto=args.use_proto, 
+                                use_csa=args.use_csa,
+                                box_score_thresh=0.5,
+                                pretrained_backbone=False)
+    
+    # model = torchvision.models.detection.maskrcnn_resnet50_fpn(
+    #     weights = None, weights_backbone = None, num_classes=vs_dataloader.dataset.n_obj + 1, box_score_thresh = 0.5)
     
 
     model = model.to(device)
@@ -73,7 +83,8 @@ def main():
         
         logger.info(f'=================== {split} Test Start ==================')
         all_pred, all_gt = [], []
-        for i, blobs in enumerate(dataloader):
+        pbar = tqdm.tqdm(dataloader, desc=f'{split} Eval')
+        for i, blobs in enumerate(pbar):
             images, targets = blobs
             if len(images) == 0:
                 continue

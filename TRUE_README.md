@@ -136,11 +136,11 @@ python train/traj_replay/check.py --split valid_unseen
 ```bash
 # 测试训练流程 (Dry Run)
 python train/train_mrcnn.py \
-  --name my_mrcnn_model_8gpu \
-  --gpu 0 1 2 3 4 5 6 7 \
-  --bz 4 \
-  --epoch 2\
-  --num_workers 64
+    --name test_mrcnn_custom_finetune \
+    --pretrained_path /home/cigit_lg/lzh/TaskTree/weights/mrcnn.pth \
+    --use_scconv --use_cbam --use_proto --use_csa \
+    --freeze_epochs 1 \
+    --epoch 1 --bz 2 --num_workers 32 --gpu 2 4 5 6 7
 
 # 正式训练
 python train/train_yolo.py --name train_yolo8 --model_config /home/cigit_lg/lzh/TaskTree/models/segmentation/yolo/yolov8-seg.yaml --gpu 2 4 5 6 --bz 4 --epoch 20 --num_workers 64
@@ -149,6 +149,14 @@ python train/train_yolo.py --name train_yolo8 --model_config /home/cigit_lg/lzh/
 # 评估感知模型
 ```bash
 python train/evaluate_yolo.py --resume logs/train_yolo8/weights/best.pt --gpu 0 --name evaluate_
+
+
+python train/evaluate_mrcnn.py \
+    --name eval_random_custom \
+    --resume weights/random_custom_mrcnn.pth \
+    --use_scconv --use_cbam --use_proto --use_csa \
+    --split valid_seen \
+    --gpu 5
 ```
 ## 5. 常见报错与修复
 

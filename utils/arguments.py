@@ -48,8 +48,6 @@ def parse_args():
     parser.add_argument('--use_gt_depth',   default=False,action='store_true')
     parser.add_argument('--use_gt_seg',   default=False,action='store_true')
     parser.add_argument('--use_gt_aff',   default=False,action='store_true')
-    
-    ############# model customization
     parser.add_argument('--text_append',   default=False,action='store_true')
     parser.add_argument('--seg_model',     default='mrcnn', type=str, choices=['mrcnn', 'yolo'])
     parser.add_argument('--map_size',      default=100,  type = int)
@@ -84,7 +82,7 @@ def parse_args():
     parser.add_argument('--lr_scheduler',default='warmup',type=str)
     parser.add_argument('--warmup_step', default=1000,type=int)
     parser.add_argument('--save_freq',   default=1,type= int)
-    parser.add_argument('--report_freq', default=1,type= int)
+    parser.add_argument('--report_freq', default=50,type= int)
     parser.add_argument('--test_freq',   default=1,type= int)
     parser.add_argument('--cosine',     default=False,action='store_true')
     parser.add_argument('--model_config', default=None, type=str, help='Path to model config file (e.g., for YOLO)')
@@ -110,7 +108,13 @@ def parse_args():
     parser.add_argument('--max_depth',   default=5000, type=float)
     parser.add_argument('--horizon',     default=None,nargs='*', type=int)
     
-
+    ############# custom mrcnn
+    parser.add_argument('--use_cbam',    default=False, action='store_true')
+    parser.add_argument('--use_scconv',  default=False, action='store_true')
+    parser.add_argument('--use_proto',   default=False, action='store_true')
+    parser.add_argument('--use_csa',     default=False, action='store_true')
+    parser.add_argument('--pretrained_path', default=None, type=str, help='Path to pretrained weights')
+    parser.add_argument('--freeze_epochs', default=0, type=int, help='Number of epochs to freeze pretrained parameters')
     
     
     

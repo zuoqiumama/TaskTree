@@ -10,6 +10,7 @@ import numpy as np
 import torch,torchvision
 from models.segmentation.sam.sam_wrapper import SamSegTrainWrapper
 from models.segmentation.sam.sam_dp_wrapper import SamDataParallelWrapper
+from models.segmentation.maskrcnn.custom_maskrcnn import get_custom_maskrcnn
 from datasets.segmentation_dataset import build_seg_dataloader
 from utils import utils, arguments
 import tqdm
@@ -105,24 +106,47 @@ def main():
     print('>>> Train #Dataset %d #Dataloader %d' % (len(train_dataloader.dataset), len(train_dataloader) ))
     print('>>> ValidSeen #Dataset %d #Dataloader %d' % (len(vs_dataloader.dataset), len(vs_dataloader)  ))
     print('>>> ValidUnseen #Dataset %d #Dataloader %d' % (len(vu_dataloader.dataset), len(vu_dataloader)  ))
-    model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True, box_score_thresh=0.5)
     
-    # Then we replace the head to match our number of classes
     num_classes = train_dataloader.dataset.n_obj + 1
-    in_features = model.roi_heads.box_predictor.cls_score.in_features
-    model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(in_features, num_classes)
+    model = get_custom_maskrcnn(num_classes=num_classes, 
+                                use_cbam=args.use_cbam, 
+                                use_scconv=args.use_scconv, 
+                                use_proto=args.use_proto, 
+                                use_csa=args.use_csa,
+                                box_score_thresh=0.5)
     
-    in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
-    hidden_layer = 256
-    model.roi_heads.mask_predictor = torchvision.models.detection.mask_rcnn.MaskRCNNPredictor(in_features_mask, hidden_layer, num_classes)
-    # model = torchvision.models.detection.maskrcnn_resnet50_fpn(
-    #     weights = None, weights_backbone = None, num_classes=train_dataloader.dataset.n_obj + 1, box_score_thresh = 0.5)
-    
-    # pretrained_ckpt_path = './weights/mrcnn_torchvision/maskrcnn_resnet50_fpn_coco-bf2d0c1e.pth'
-    # predtrained_ckpt = torch.load(pretrained_ckpt_path)
-    # predtrained_ckpt = {k:v for k,v in predtrained_ckpt.items() if 'roi_heads.box_predictor' not in k and 'roi_heads.mask_predictor.mask_fcn_logits' not in k}
-    # load_result = model.load_state_dict(predtrained_ckpt, strict=False)
-    # print(load_result)
+    pretrained_keys = set()
+    if args.pretrained_path:
+        print(f'Loading pretrained weights from {args.pretrained_path}')
+        ckpt = torch.load(args.pretrained_path, map_location='cpu')
+        if 'model' in ckpt:
+            state_dict = ckpt['model']
+        else:
+            state_dict = ckpt
+            
+        model_dict = model.state_dict()
+        # Filter out unnecessary keys and keys with shape mismatch
+        pretrained_dict = {}
+        for k, v in state_dict.items():
+            if k in model_dict:
+                if model_dict[k].shape == v.shape:
+                    pretrained_dict[k] = v
+                    pretrained_keys.add(k)
+                else:
+                    print(f'Skipping {k} due to shape mismatch: {v.shape} vs {model_dict[k].shape}')
+            else:
+                # print(f'Skipping {k} as it is not in the model')
+                pass
+                
+        model_dict.update(pretrained_dict)
+        model.load_state_dict(model_dict, strict=False)
+        print(f'Loaded {len(pretrained_dict)}/{len(model_dict)} keys from pretrained weights')
+        
+        if args.freeze_epochs > 0:
+            print(f'Freezing {len(pretrained_keys)} pretrained parameters for {args.freeze_epochs} epochs')
+            for name, param in model.named_parameters():
+                if name in pretrained_keys:
+                    param.requires_grad = False
 
     model = model.to(device)
     if use_dp:
@@ -146,9 +170,16 @@ def main():
         
     
     for ep in range(1, args.epoch + 1):
+        if args.freeze_epochs > 0 and ep == args.freeze_epochs + 1:
+            print(f'Unfreezing pretrained parameters at epoch {ep}')
+            for name, param in model.named_parameters():
+                if name in pretrained_keys:
+                    param.requires_grad = True
+                    
         logger.info(f'=================== Epoch {ep} Train Start ==================')
         model.train()
-        for i, blobs in enumerate(train_dataloader):
+        pbar = tqdm.tqdm(train_dataloader, desc=f'Epoch {ep}')
+        for i, blobs in enumerate(pbar):
             step = 1 + i + (ep - 1) * len(train_dataloader)
             images, targets = blobs
             images  = [img.to(device) for img in images]
@@ -162,9 +193,10 @@ def main():
                 'loss_mask' : 1,
                 'loss_objectness' : 5,
                 'loss_rpn_box_reg' : 1,
+                'loss_proto': 0.001,
             }
 
-            output = {k:loss_weights[k] * v for k,v in output.items()}
+            output = {k:loss_weights.get(k, 1.0) * v for k,v in output.items()}
             loss = sum(output.values())
             optimizer.zero_grad()
             scaler.scale(loss).backward()
@@ -174,6 +206,9 @@ def main():
 
             for key,val in output.items():
                 writer.add_scalar(key, val, step)
+            
+            pbar.set_postfix({'loss': f'{loss.item():.4f}', 'lr': f"{optimizer.param_groups[0]['lr']:.2e}"})
+            
             if step % args.report_freq == 0 or i == len(train_dataloader) - 1:
                 report = 'Epoch %.4f Step %d. LR %.2e  loss %.4f.' % (
                     step/len(train_dataloader), step , optimizer.param_groups[0]['lr'], loss,
