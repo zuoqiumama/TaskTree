@@ -96,8 +96,8 @@ def main():
     use_dp = len(args.gpu) > 1
     if use_dp:
         args.bz = args.bz * len(args.gpu)
-    args.image_size  = 320
-    args.mask_size   = 320
+    args.image_size  = 300
+    args.mask_size   = 300
     train_dataloader = build_seg_dataloader('AlfredSegImageDataset', split='train', args=args)
     args.num_workers = args.num_workers // 8
     vs_dataloader = build_seg_dataloader('AlfredSegImageDataset', split='valid_seen', args=args)

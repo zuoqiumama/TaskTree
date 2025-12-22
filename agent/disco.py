@@ -456,15 +456,33 @@ class Agent(BaseAgent):
         obstacle = binary_dilation(navigable == 0, np.array([[0,1,0],[1,1,1],[0,1,0]]))
         
         waypoints[obstacle == 0] = 0
-        waypoints[self.visited_map.cpu().numpy().astype(bool)] = 0
-        x,z = self.pose[:2]
-        waypoints[x,z] = 0
         
-        pts = np.argwhere(waypoints==1)
+        # Try to find unvisited points first
+        candidates = waypoints.copy()
+        candidates[self.visited_map.cpu().numpy().astype(bool)] = 0
+        x,z = self.pose[:2]
+        candidates[x,z] = 0
+        
+        pts = np.argwhere(candidates==1)
+        
+        # If no unvisited points, try any navigable point (excluding current pos)
         if len(pts) == 0:
-            error= f'Sample Random Waypoint: Fail! Stucked Agent'
-            self.log(error) 
-            raise RuntimeError(error)
+            self.log("No unvisited random waypoints found, trying visited ones...")
+            candidates = waypoints.copy()
+            candidates[x,z] = 0
+            pts = np.argwhere(candidates==1)
+        
+        # If still no points, try original navigable map without obstacle dilation
+        if len(pts) == 0:
+            self.log("Still no waypoints, trying without obstacle dilation...")
+            candidates = navigable.copy()
+            candidates[x,z] = 0
+            pts = np.argwhere(candidates==1)
+            
+        if len(pts) == 0:
+            # Return current position as fallback instead of raising error
+            self.log(f'Sample Random Waypoint: No waypoints available, returning current position')
+            return np.array([x, z])
         else:
             index = np.random.choice(len(pts))
             return np.array([pts[index][0], pts[index][1]])
@@ -819,6 +837,10 @@ class Agent(BaseAgent):
             self.perceive(learn= False)
             object_idx = [i for i in range(len(self.segementation_frame['labels'])) if self.segementation_frame['labels'][i].item() == orig_pick]
             object_idx = sorted(object_idx, key = lambda x: self.segementation_frame['masks'][x].sum(), reverse= True)
+            if len(object_idx) == 0:
+                self.log(f'clean: cannot find object {orig_pick} after cleaning')
+                self.picked_object = orig_pick
+                return False
             object_idx = object_idx[0]
             _, _, _, _, _ = self.va_interact('PickupObject', self.segementation_frame['masks'][object_idx].cpu().numpy())
             

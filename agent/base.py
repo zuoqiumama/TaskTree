@@ -78,10 +78,6 @@ class Agent:
             exit(0)
         except Exception as e:
             pass
-            # traceback.print_exc()
-            # task_index = self.task_info['task_index']
-            # print(f"============== Error!!! task_index={task_index} ============")
-            # self.log(repr(e))
         
         result = self.evaluate_alfred_task()
         with open(os.path.join(self.task_log_dir,'_result.json'),'w') as f:

@@ -48,7 +48,10 @@ def parse_args():
     parser.add_argument('--use_gt_depth',   default=False,action='store_true')
     parser.add_argument('--use_gt_seg',   default=False,action='store_true')
     parser.add_argument('--use_gt_aff',   default=False,action='store_true')
+    
+    ############# model customization
     parser.add_argument('--text_append',   default=False,action='store_true')
+    parser.add_argument('--seg_model',     default='mrcnn', type=str, choices=['mrcnn', 'yolo'])
     parser.add_argument('--map_size',      default=100,  type = int)
     parser.add_argument('--map_unit',      default=250,  type = int)
     parser.add_argument('--obj_thresh',    default=0.5,  type = float)

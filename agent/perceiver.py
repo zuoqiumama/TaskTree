@@ -15,6 +15,7 @@ from collections import defaultdict
 from utils import utils
 import os
 from gen import constants
+from ultralytics import YOLO
 
 class Agent(BaseAgent):
     def __init__(self, args, env):
@@ -29,8 +30,11 @@ class Agent(BaseAgent):
         self.affordance_net = AffordanceUNET(n_cls=len(ALFRED_AFFORDANCE_LIST)).to(self.device).eval()
         self.affordance_net.load_state_dict(torch.load('./weights/affordance.pth',map_location='cpu')['model'])
         
-        self.mrcnn = torchvision.models.detection.maskrcnn_resnet50_fpn(weights = None, weights_backbone = None, num_classes=len(ALFRED_INTEREST_OBJECTS) + 1).to(self.device).eval()
-        self.mrcnn.load_state_dict(torch.load('./weights/mrcnn.pth',map_location='cpu')['model'])
+        if self.args.seg_model == 'mrcnn':
+            self.mrcnn = torchvision.models.detection.maskrcnn_resnet50_fpn(weights = None, weights_backbone = None, num_classes=len(ALFRED_INTEREST_OBJECTS) + 1).to(self.device).eval()
+            self.mrcnn.load_state_dict(torch.load('./weights/mrcnn.pth',map_location='cpu')['model'])
+        elif self.args.seg_model == 'yolo':
+            self.yolo_model = YOLO('/home/cigit_lg/lzh/TaskTree/logs/train_yolo8l/weights/best.pt')
         
         self.text_db = pkl.load(open('./weights/bert.pkl','rb'))
         
@@ -301,29 +305,66 @@ class Agent(BaseAgent):
                     out['areas'].append(mask.sum())
                     
         else:
-            rgb = torch.from_numpy(self.env.last_event.frame.copy()).permute(2,0,1).float().contiguous().to(self.device) / 255
-            segs = self.mrcnn([rgb])[0]
-            segs['labels'] -= 1
-            segs['masks'] = segs['masks'].squeeze(1)
             out = {'boxes': [], 'labels': [], 'scores': [], 'masks': [], 'names': [], 'areas': []}
-            for i in range(len(segs['scores'])):
-                if segs['scores'][i] < self.args.obj_thresh:
-                    continue
-                box = segs['boxes'][i].cpu().numpy()
-                mask = (segs['masks'][i] > 0.5).float().detach()
-                area = mask.sum().item()
-                label = segs['labels'][i].item()
+            
+            if self.args.seg_model == 'mrcnn':
+                rgb = torch.from_numpy(self.env.last_event.frame.copy()).permute(2,0,1).float().contiguous().to(self.device) / 255
+                segs = self.mrcnn([rgb])[0]
+                segs['labels'] -= 1
+                segs['masks'] = segs['masks'].squeeze(1)
                 
+                for i in range(len(segs['scores'])):
+                    if segs['scores'][i] < self.args.obj_thresh:
+                        continue
+                    box = segs['boxes'][i].cpu().numpy()
+                    mask = (segs['masks'][i] > 0.5).float().detach()
+                    area = mask.sum().item()
+                    label = segs['labels'][i].item()
+                    
+                    if box[3] - box[1] < 5 or box[2] - box[0] < 5:
+                        continue
+                    
+                    out['boxes'].append(box)
+                    out['labels'].append(label)
+                    out['scores'].append(segs['scores'][i].item())
+                    out['masks'].append(mask)
+                    out['names'].append(self.object_list[label])
+                    out['areas'].append(area)
+            
+            elif self.args.seg_model == 'yolo':
+                # YOLO Inference
+                frame = self.env.last_event.frame.copy()
+                results = self.yolo_model(frame, imgsz=320, verbose=False, device=self.device)
+                result = results[0]
                 
-                if box[3] - box[1] < 5 or box[2] - box[0] < 5:
-                    continue
-                
-                out['boxes'].append(box)
-                out['labels'].append(label)
-                out['scores'].append(segs['scores'][i].item())
-                out['masks'].append(mask)
-                out['names'].append(self.object_list[label])
-                out['areas'].append(area)
+                if result.masks is not None:
+                    masks = result.masks.data.to(self.device).float()
+                    boxes = result.boxes.xyxy.to(self.device)
+                    clss = result.boxes.cls.to(self.device)
+                    confs = result.boxes.conf.to(self.device)
+                    
+                    # Resize masks to original image size if needed
+                    if masks.shape[1:] != frame.shape[:2]:
+                        masks = torch.nn.functional.interpolate(masks.unsqueeze(1), size=frame.shape[:2], mode='bilinear', align_corners=False).squeeze(1)
+
+                    for i in range(len(confs)):
+                        if confs[i] < self.args.obj_thresh:
+                            continue
+                        
+                        box = boxes[i].cpu().numpy()
+                        mask = (masks[i] > 0.5).float()
+                        area = mask.sum().item()
+                        label = int(clss[i].item())
+                        
+                        if box[3] - box[1] < 5 or box[2] - box[0] < 5:
+                            continue
+                        
+                        out['boxes'].append(box)
+                        out['labels'].append(label)
+                        out['scores'].append(confs[i].item())
+                        out['masks'].append(mask)
+                        out['names'].append(self.object_list[label])
+                        out['areas'].append(area)
             # self.object_spotted[label] = True    
         
         if len(out['masks']) == 0:
