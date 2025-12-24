@@ -82,7 +82,7 @@ class BackboneWithPAFPN(nn.Module):
         if self.extra_blocks is not None:
             results_list = list(results.values())
             names = list(results.keys())
-            results_list = self.extra_blocks(results_list, x, names)
+            results_list, names = self.extra_blocks(results_list, x, names)
             results = OrderedDict([(k, v) for k, v in zip(names, results_list)])
             
         return results
@@ -260,6 +260,14 @@ class CustomMaskRCNN(MaskRCNN):
 
                 proto_loss = nn.functional.binary_cross_entropy_with_logits(proto_logits, target_one_hot)
                 losses['loss_proto'] = proto_loss
+
+        # Debugging: Check types of features
+        # for k, v in features.items():
+        #     print(f"Feature {k}: type={type(v)}")
+        #     if isinstance(v, list):
+        #         print(f"Feature {k} is a list! Length: {len(v)}")
+        #         if len(v) > 0:
+        #             print(f"Element 0 type: {type(v[0])}")
 
         proposals, proposal_losses = self.rpn(images, features, targets)
         detections, detector_losses = self.roi_heads(features, proposals, images.image_sizes, targets)
