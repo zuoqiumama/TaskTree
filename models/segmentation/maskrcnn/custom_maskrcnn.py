@@ -154,8 +154,19 @@ class CustomMaskRCNN(MaskRCNN):
                 target_one_hot = torch.zeros(batch_size, self.proto_net.num_classes, device=device)
                 for i, labels in enumerate(gt_labels):
                     if len(labels) > 0:
-                        target_one_hot[i, labels] = 1.0
+                        # Safety check for labels
+                        valid_mask = (labels >= 0) & (labels < self.proto_net.num_classes)
+                        if not valid_mask.all():
+                            invalid_labels = labels[~valid_mask]
+                            print(f"WARNING: Found invalid labels: {invalid_labels} for num_classes {self.proto_net.num_classes}")
+                            labels = labels[valid_mask]
+                        
+                        if len(labels) > 0:
+                            target_one_hot[i, labels] = 1.0
                 
+                if torch.isnan(proto_logits).any() or torch.isinf(proto_logits).any():
+                     print("WARNING: proto_logits contains NaN or Inf")
+
                 proto_loss = nn.functional.binary_cross_entropy_with_logits(proto_logits, target_one_hot)
                 losses['loss_proto'] = proto_loss
 

@@ -46,7 +46,7 @@ class MRCNNDataParallelWrapper(torch.nn.DataParallel):
                 images = inputs[0]
                 for i in range(cur,cur+s):
                     images[i] = images[i].to(device)
-                new_inputs.append([images[cur:cur+s]])
+                new_inputs.append((images[cur:cur+s],))
             else:
                 images, targets = inputs
                 for i in range(cur,cur+s):
@@ -54,7 +54,7 @@ class MRCNNDataParallelWrapper(torch.nn.DataParallel):
                     for k in targets[i]:
                         if isinstance(targets[i][k],torch.Tensor):
                             targets[i][k] = targets[i][k].to(device)
-                new_inputs.append([images[cur:cur+s], targets[cur:cur+s]])
+                new_inputs.append((images[cur:cur+s], targets[cur:cur+s]))
             cur += s
         kwargs = [kwargs for _ in range(len(new_inputs))]
         return new_inputs,kwargs

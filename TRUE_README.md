@@ -136,11 +136,11 @@ python train/traj_replay/check.py --split valid_unseen
 ```bash
 # 测试训练流程 (Dry Run)
 python train/train_mrcnn.py \
-    --name test_mrcnn_custom_finetune \
+    --name train_mrcnn_all \
     --pretrained_path /home/cigit_lg/lzh/TaskTree/weights/mrcnn.pth \
     --use_scconv --use_cbam --use_proto --use_csa \
     --freeze_epochs 1 \
-    --epoch 1 --bz 2 --num_workers 32 --gpu 2 4 5 6 7
+    --epoch 17 --bz 2 --num_workers 64 --gpu 2 5 6 7
 
 # 正式训练
 python train/train_yolo.py --name train_yolo8 --model_config /home/cigit_lg/lzh/TaskTree/models/segmentation/yolo/yolov8-seg.yaml --gpu 2 4 5 6 --bz 4 --epoch 20 --num_workers 64
