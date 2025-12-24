@@ -3,9 +3,89 @@ import torch.nn as nn
 import torchvision
 from torchvision.models.resnet import Bottleneck, ResNet
 from torchvision.models.detection.backbone_utils import BackboneWithFPN
+from torchvision.models._utils import IntermediateLayerGetter
+from torchvision.ops.feature_pyramid_network import FeaturePyramidNetwork, LastLevelMaxPool
 from torchvision.models.detection import MaskRCNN
 from collections import OrderedDict
 from models.custom_modules import ResCBAM, SCConv, ProtoNet, CrossScaleAttention
+
+class BackboneWithPAFPN(nn.Module):
+    def __init__(self, backbone, return_layers, in_channels_list, out_channels, extra_blocks=None, use_csa=False):
+        super(BackboneWithPAFPN, self).__init__()
+        if extra_blocks is None:
+            extra_blocks = LastLevelMaxPool()
+        self.body = IntermediateLayerGetter(backbone, return_layers=return_layers)
+        self.return_layers = return_layers
+        
+        # Standard FPN (Top-Down)
+        self.fpn = FeaturePyramidNetwork(
+            in_channels_list=in_channels_list,
+            out_channels=out_channels,
+            extra_blocks=None, 
+        )
+        self.extra_blocks = extra_blocks
+        
+        # PAFPN (Bottom-Up)
+        self.downsample_convs = nn.ModuleDict()
+        self.downsample_convs['0_1'] = nn.Conv2d(out_channels, out_channels, 3, stride=2, padding=1)
+        self.downsample_convs['1_2'] = nn.Conv2d(out_channels, out_channels, 3, stride=2, padding=1)
+        self.downsample_convs['2_3'] = nn.Conv2d(out_channels, out_channels, 3, stride=2, padding=1)
+        
+        self.use_csa = use_csa
+        if self.use_csa:
+            # CSA for N3, N4, N5 calculation
+            self.csa_n3 = CrossScaleAttention([out_channels, out_channels], out_channels)
+            self.csa_n4 = CrossScaleAttention([out_channels, out_channels], out_channels)
+            self.csa_n5 = CrossScaleAttention([out_channels, out_channels], out_channels)
+            
+        self.out_channels = out_channels
+
+    def forward(self, x):
+        x = self.body(x)
+        
+        # FPN
+        fpn_out = self.fpn(x)
+        
+        # PAFPN
+        n2 = fpn_out['0'] # P2
+        p3 = fpn_out['1']
+        p4 = fpn_out['2']
+        p5 = fpn_out['3']
+
+        # N3
+        n2_down = self.downsample_convs['0_1'](n2)
+        if self.use_csa:
+            n3 = self.csa_n3([p3, n2_down]) + p3
+        else:
+            n3 = n2_down + p3
+
+        # N4
+        n3_down = self.downsample_convs['1_2'](n3)
+        if self.use_csa:
+            n4 = self.csa_n4([p4, n3_down]) + p4
+        else:
+            n4 = n3_down + p4
+        
+        # N5
+        n4_down = self.downsample_convs['2_3'](n4)
+        if self.use_csa:
+            n5 = self.csa_n5([p5, n4_down]) + p5
+        else:
+            n5 = n4_down + p5
+            
+        results = OrderedDict()
+        results['0'] = n2
+        results['1'] = n3
+        results['2'] = n4
+        results['3'] = n5
+        
+        if self.extra_blocks is not None:
+            results_list = list(results.values())
+            names = list(results.keys())
+            results_list = self.extra_blocks(results_list, x, names)
+            results = OrderedDict([(k, v) for k, v in zip(names, results_list)])
+            
+        return results
 
 class CustomBottleneck(Bottleneck):
     def __init__(self, inplanes, planes, stride=1, downsample=None, groups=1,
@@ -60,16 +140,22 @@ class CustomResNet(ResNet):
         self.use_cbam = use_cbam
         self.use_scconv = use_scconv
         
+        if self.use_cbam:
+            # Apply ResCBAM before Layer 1 (C2)
+            # The input to layer1 is 64 channels (from stem)
+            self.cbam_stem = ResCBAM(64)
+        
         if replace_stride_with_dilation is None:
             replace_stride_with_dilation = [False, False, False]
         
         # Re-create layers with custom flags
         self.inplanes = 64 # Reset inplanes
         self.dilation = 1 # Reset dilation
-        self.layer1 = self._make_layer(block, 64, layers[0], use_cbam=use_cbam, use_scconv=use_scconv)
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0], use_cbam=use_cbam, use_scconv=use_scconv)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1], use_cbam=use_cbam, use_scconv=use_scconv)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2], use_cbam=use_cbam, use_scconv=use_scconv)
+        # Note: We pass use_cbam=False to blocks because we only use it once at stem
+        self.layer1 = self._make_layer(block, 64, layers[0], use_cbam=False, use_scconv=use_scconv)
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0], use_cbam=False, use_scconv=use_scconv)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1], use_cbam=False, use_scconv=use_scconv)
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2], use_cbam=False, use_scconv=use_scconv)
 
     def _make_layer(self, block, planes, blocks, stride=1, dilate=False, use_cbam=False, use_scconv=False):
         norm_layer = self._norm_layer
@@ -96,20 +182,35 @@ class CustomResNet(ResNet):
                                 use_cbam=use_cbam, use_scconv=use_scconv))
 
         return nn.Sequential(*layers)
+        
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        if self.use_cbam:
+            x = self.cbam_stem(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+
+        if self.avgpool:
+             x = self.avgpool(x)
+             x = torch.flatten(x, 1)
+             x = self.fc(x)
+
+        return x
 
 class CustomMaskRCNN(MaskRCNN):
     def __init__(self, backbone, num_classes=None, 
-                 use_proto=False, use_csa=False,
+                 use_proto=False,
                  **kwargs):
         super(CustomMaskRCNN, self).__init__(backbone, num_classes, **kwargs)
         self.use_proto = use_proto
-        self.use_csa = use_csa
         
-        if self.use_csa:
-            out_channels = backbone.out_channels
-            # FPN outputs 256 channels
-            self.csa = CrossScaleAttention([out_channels]*4, out_channels)
-            
         if self.use_proto:
             self.proto_net = ProtoNet(backbone.out_channels, num_classes)
 
@@ -129,21 +230,11 @@ class CustomMaskRCNN(MaskRCNN):
         if isinstance(features, torch.Tensor):
             features = OrderedDict([('0', features)])
             
-        refined_feat = None
-        if self.use_csa:
-            # Only use the first 4 features (P2, P3, P4, P5) which correspond to keys '0', '1', '2', '3'
-            # 'pool' key might be present but we don't use it for CSA
-            csa_keys = ['0', '1', '2', '3']
-            feat_list = [features[k] for k in csa_keys if k in features]
-            refined_feat = self.csa(feat_list)
-
         losses = {}
         
         if self.use_proto:
-            if refined_feat is not None:
-                 proto_input = refined_feat
-            else:
-                 proto_input = list(features.values())[-1]
+            # Use the last feature map (N5) for ProtoNet
+            proto_input = list(features.values())[-1]
             
             proto_logits = self.proto_net(proto_input)
             
@@ -178,9 +269,11 @@ class CustomMaskRCNN(MaskRCNN):
             losses.update(detector_losses)
             return losses
         
+        detections = self.transform.postprocess(detections, images.image_sizes, original_image_sizes)
         return detections
 
 def get_custom_maskrcnn(num_classes, use_cbam=False, use_scconv=False, use_proto=False, use_csa=False, pretrained_backbone=True, **kwargs):
+    # Pass use_cbam to CustomResNet, where it will be applied once before Layer 1
     backbone = CustomResNet(CustomBottleneck, [3, 4, 6, 3], use_cbam=use_cbam, use_scconv=use_scconv)
     
     if pretrained_backbone:
@@ -193,7 +286,8 @@ def get_custom_maskrcnn(num_classes, use_cbam=False, use_scconv=False, use_proto
     return_layers = {'layer1': '0', 'layer2': '1', 'layer3': '2', 'layer4': '3'}
     in_channels_list = [256, 512, 1024, 2048]
     out_channels = 256
-    backbone_with_fpn = BackboneWithFPN(backbone, return_layers, in_channels_list, out_channels)
+    # We don't need use_cbam here anymore as it's handled in the backbone
+    backbone_with_fpn = BackboneWithPAFPN(backbone, return_layers, in_channels_list, out_channels, use_csa=use_csa)
     
-    model = CustomMaskRCNN(backbone_with_fpn, num_classes=num_classes, use_proto=use_proto, use_csa=use_csa, **kwargs)
+    model = CustomMaskRCNN(backbone_with_fpn, num_classes=num_classes, use_proto=use_proto, **kwargs)
     return model
