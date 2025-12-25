@@ -38,7 +38,17 @@ class BackboneWithPAFPN(nn.Module):
             self.csa_n4 = CrossScaleAttention([out_channels, out_channels], out_channels)
             self.csa_n5 = CrossScaleAttention([out_channels, out_channels], out_channels)
             
+            # Learnable weights for CSA fusion
+            self.w_n3 = nn.Parameter(torch.tensor(0.0))
+            self.w_n4 = nn.Parameter(torch.tensor(0.0))
+            self.w_n5 = nn.Parameter(torch.tensor(0.0))
+            
         self.out_channels = out_channels
+        self.pafpn_convs = nn.ModuleDict()
+        self.pafpn_convs['n2'] = nn.Conv2d(out_channels, out_channels, 3, padding=1)
+        self.pafpn_convs['n3'] = nn.Conv2d(out_channels, out_channels, 3, padding=1)
+        self.pafpn_convs['n4'] = nn.Conv2d(out_channels, out_channels, 3, padding=1)
+        self.pafpn_convs['n5'] = nn.Conv2d(out_channels, out_channels, 3, padding=1)
 
     def forward(self, x):
         x = self.body(x)
@@ -51,27 +61,30 @@ class BackboneWithPAFPN(nn.Module):
         p3 = fpn_out['1']
         p4 = fpn_out['2']
         p5 = fpn_out['3']
-
+        n2 = self.pafpn_convs['n2'](n2)
         # N3
         n2_down = self.downsample_convs['0_1'](n2)
         if self.use_csa:
-            n3 = self.csa_n3([p3, n2_down]) + p3
+            n3 = self.csa_n3([p3, n2_down]) * self.w_n3 + p3
         else:
             n3 = n2_down + p3
+        n3 = self.pafpn_convs['n3'](n3)
 
         # N4
         n3_down = self.downsample_convs['1_2'](n3)
         if self.use_csa:
-            n4 = self.csa_n4([p4, n3_down]) + p4
+            n4 = self.csa_n4([p4, n3_down]) * self.w_n4 + p4
         else:
             n4 = n3_down + p4
+        n4 = self.pafpn_convs['n4'](n4)
         
         # N5
         n4_down = self.downsample_convs['2_3'](n4)
         if self.use_csa:
-            n5 = self.csa_n5([p5, n4_down]) + p5
+            n5 = self.csa_n5([p5, n4_down]) * self.w_n5 + p5
         else:
             n5 = n4_down + p5
+        n5 = self.pafpn_convs['n5'](n5)
             
         results = OrderedDict()
         results['0'] = n2
