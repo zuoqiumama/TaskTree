@@ -82,7 +82,9 @@ def main():
     for split, dataloader in [('valid_seen', vs_dataloader), ('valid_unseen', vu_dataloader)]:
         
         logger.info(f'=================== {split} Test Start ==================')
-        all_pred, all_gt = [], []
+        all_pred_match, all_gt_match = [], []
+        all_pred_class, all_gt_class = [], []
+        
         pbar = tqdm.tqdm(dataloader, desc=f'{split} Eval')
         for i, blobs in enumerate(pbar):
             images, targets = blobs
@@ -92,19 +94,49 @@ def main():
             with torch.no_grad():
                 with torch.cuda.amp.autocast(enabled=args.amp):
                     output = model(images)
-            for tgt in targets:
-                all_gt.append({
+            
+            for j in range(len(targets)):
+                tgt = targets[j]
+                pred = output[j]
+                
+                gts = {
                     'label' : tgt['labels'].numpy(),
                     'mask'  : tgt['masks'].numpy()
-                })
-            for pred in output:
-                all_pred.append({
+                }
+                preds = {
                     'label' : pred['labels'].data.cpu().numpy(),
                     'mask'  : pred['masks'].data.cpu().numpy(),
                     'score' : pred['scores'].data.cpu().numpy(),
-                })
+                }
+                
+                pred_match, gt_match = utils.instance_match((gts, preds, 0.5))
+                
+                all_pred_match.append(pred_match)
+                all_gt_match.append(gt_match)
+                all_pred_class.append(preds['label'])
+                all_gt_class.append(gts['label'])
+
         logger.info(f'=================== {split} Inference Done ==================')
-        precision, recall, precision_per_class, recall_per_class = utils.get_instance_segmentation_metrics(all_gt, all_pred)
+        
+        pred_match = np.concatenate(all_pred_match, 0) if all_pred_match else np.array([])
+        gt_match   = np.concatenate(all_gt_match, 0) if all_gt_match else np.array([])
+        pred_class = np.concatenate(all_pred_class, 0) if all_pred_class else np.array([])
+        gt_class   = np.concatenate(all_gt_class, 0) if all_gt_class else np.array([])
+        
+        recall    = gt_match.mean() * 100 if len(gt_match) > 0 else 0
+        precision = pred_match.mean() * 100 if len(pred_match) > 0 else 0
+        
+        precision_per_class = {}
+        recall_per_class = {}
+        
+        for i in np.unique(gt_class):
+            instances = gt_match[gt_class == i]
+            recall_per_class[i] = '%d / %d = %.2f' % (instances.sum(),instances.shape[0],instances.mean()*100) + '%'
+        for i in np.unique(pred_class):
+            if i < 0:
+                continue
+            instances = pred_match[pred_class == i]
+            precision_per_class[i] = '%d / %d = %.2f' % (instances.sum(),instances.shape[0],instances.mean()*100) + '%'
         logger.info(f'=================== Split [{split}] Segmentation Result =====================')
         for i, name in enumerate(ALFRED_INTEREST_OBJECTS):
             class_idx = i + 1

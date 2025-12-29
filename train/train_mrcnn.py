@@ -152,7 +152,29 @@ def main():
     if use_dp:
         model = MRCNNDataParallelWrapper(model,device_ids=args.gpu)
 
-    optimizer = build_optimizer(args, model.parameters())
+    # Separate parameters into pretrained (low LR) and new (base LR) groups
+    pretrained_params = []
+    new_params = []
+    
+    for name, param in model.named_parameters():
+        # Handle DataParallel prefix
+        key_name = name
+        if use_dp and name.startswith('module.'):
+            key_name = name[7:]
+            
+        if key_name in pretrained_keys:
+            pretrained_params.append(param)
+        else:
+            new_params.append(param)
+            
+    print(f"Optimizer groups: {len(pretrained_params)} pretrained params (lr={args.base_lr*0.1:.2e}), {len(new_params)} new params (lr={args.base_lr:.2e})")
+
+    param_groups = [
+        {'params': pretrained_params, 'lr': args.base_lr * 0.1},
+        {'params': new_params, 'lr': args.base_lr}
+    ]
+
+    optimizer = build_optimizer(args, param_groups)
     lr_scheduler = build_lr_scheduler(args,optimizer)
     scaler = torch.cuda.amp.GradScaler(enabled=args.amp)
     
@@ -221,25 +243,56 @@ def main():
             model.eval()
             # for split, dataloader in [('valid_seen', vs_dataloader), ('valid_unseen', vu_dataloader)]:
             for split, dataloader in [('valid_unseen', vu_dataloader)]:            
-                all_pred, all_gt = [], []
+                all_pred_match, all_gt_match = [], []
+                all_pred_class, all_gt_class = [], []
+                
                 for i, blobs in enumerate(dataloader):
                     images, targets = blobs
                     images  = [img.to(device) for img in images]
                     with torch.no_grad():
                         with torch.cuda.amp.autocast(enabled=args.amp):
                             output = model(images)
-                    for tgt in targets:
-                        all_gt.append({
+                    
+                    for j in range(len(targets)):
+                        tgt = targets[j]
+                        pred = output[j]
+                        
+                        gts = {
                             'label' : tgt['labels'].numpy(),
                             'mask'  : tgt['masks'].numpy()
-                        })
-                    for pred in output:
-                        all_pred.append({
+                        }
+                        preds = {
                             'label' : pred['labels'].data.cpu().numpy(),
                             'mask'  : pred['masks'].data.cpu().numpy(),
                             'score' : pred['scores'].data.cpu().numpy(),
-                        })
-                precision, recall, precision_per_class, recall_per_class = utils.get_instance_segmentation_metrics(all_gt, all_pred)
+                        }
+                        
+                        pred_match, gt_match = utils.instance_match((gts, preds, 0.5))
+                        
+                        all_pred_match.append(pred_match)
+                        all_gt_match.append(gt_match)
+                        all_pred_class.append(preds['label'])
+                        all_gt_class.append(gts['label'])
+
+                pred_match = np.concatenate(all_pred_match, 0) if all_pred_match else np.array([])
+                gt_match   = np.concatenate(all_gt_match, 0) if all_gt_match else np.array([])
+                pred_class = np.concatenate(all_pred_class, 0) if all_pred_class else np.array([])
+                gt_class   = np.concatenate(all_gt_class, 0) if all_gt_class else np.array([])
+                
+                recall    = gt_match.mean() * 100 if len(gt_match) > 0 else 0
+                precision = pred_match.mean() * 100 if len(pred_match) > 0 else 0
+                
+                precision_per_class = {}
+                recall_per_class = {}
+                
+                for i in np.unique(gt_class):
+                    instances = gt_match[gt_class == i]
+                    recall_per_class[i] = '%d / %d = %.2f' % (instances.sum(),instances.shape[0],instances.mean()*100) + '%'
+                for i in np.unique(pred_class):
+                    if i < 0:
+                        continue
+                    instances = pred_match[pred_class == i]
+                    precision_per_class[i] = '%d / %d = %.2f' % (instances.sum(),instances.shape[0],instances.mean()*100) + '%'
                 logger.info(f'=================== Split [{split}] Segmentation Result =====================')
                 for i, name in enumerate(ALFRED_INTEREST_OBJECTS):
                     class_idx = i + 1

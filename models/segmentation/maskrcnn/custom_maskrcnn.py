@@ -39,9 +39,9 @@ class BackboneWithPAFPN(nn.Module):
             self.csa_n5 = CrossScaleAttention([out_channels, out_channels], out_channels)
             
             # Learnable weights for CSA fusion
-            self.w_n3 = nn.Parameter(torch.tensor(0.0))
-            self.w_n4 = nn.Parameter(torch.tensor(0.0))
-            self.w_n5 = nn.Parameter(torch.tensor(0.0))
+            self.w_n3 = nn.Parameter(torch.tensor(0.5))
+            self.w_n4 = nn.Parameter(torch.tensor(0.5))
+            self.w_n5 = nn.Parameter(torch.tensor(0.5))
             
         self.out_channels = out_channels
         self.pafpn_convs = nn.ModuleDict()
@@ -165,10 +165,10 @@ class CustomResNet(ResNet):
         self.inplanes = 64 # Reset inplanes
         self.dilation = 1 # Reset dilation
         # Note: We pass use_cbam=False to blocks because we only use it once at stem
-        self.layer1 = self._make_layer(block, 64, layers[0], use_cbam=False, use_scconv=use_scconv)
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0], use_cbam=False, use_scconv=use_scconv)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1], use_cbam=False, use_scconv=use_scconv)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2], use_cbam=False, use_scconv=use_scconv)
+        self.layer1 = self._make_layer(block, 64, layers[0], use_cbam=False, use_scconv=False)
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0], use_cbam=False, use_scconv=False)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1], use_cbam=False, use_scconv=False)
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2], use_cbam=False, use_scconv=False)
 
     def _make_layer(self, block, planes, blocks, stride=1, dilate=False, use_cbam=False, use_scconv=False):
         norm_layer = self._norm_layer

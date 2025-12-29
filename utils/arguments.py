@@ -76,7 +76,7 @@ def parse_args():
     parser.add_argument('--optimizer',   default='AdamW',type=str)
     parser.add_argument('--base_lr',     default=5e-4, type=float)
     parser.add_argument('--momentum',    default=0.9, type=float)
-    parser.add_argument('--weight_decay',default=0.1, type=float)
+    parser.add_argument('--weight_decay',default=0.05, type=float)
     parser.add_argument('--beta1',       default=0.9, type=float)
     parser.add_argument('--beta2',       default=0.999, type=float)
     parser.add_argument('--lr_scheduler',default='warmup',type=str)

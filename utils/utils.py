@@ -296,33 +296,33 @@ def get_point_segmentation_metrics(all_gt,all_pred,iou_threshold = 0.5):
     return mean_iou, recall, iou_per_class, recall_per_class
 
 
-def get_instance_segmentation_metrics(all_gt,all_pred,iou_threshold = 0.5):
+def instance_match(blobs):
+    gts,preds,iou_threshold = blobs
+    n_gt,n_pred = len(gts['label']), len(preds['label'])
     
-    def instance_match(blobs):
-        gts,preds,iou_threshold = blobs
-        n_gt,n_pred = len(gts['label']), len(preds['label'])
-        
-        if n_gt == 0 or n_pred == 0:
-            return np.zeros(n_pred), np.zeros(n_gt)
-        
-        class_match_matrix = preds['label'][:,None] == gts['label'][None,:]
-        
-        pred_match = np.zeros(n_pred)
-        gt_match = np.zeros(n_gt)
-        
-        for i in sorted(range(n_pred),key=lambda x : - preds['score'][x]):
-            for j in range(n_gt):
-                if gt_match[j]:
-                    continue
-                if not class_match_matrix[i,j]:
-                    continue
-                intersection = (preds['mask'][i] * gts['mask'][j]).sum()
-                union = preds['mask'][i].sum() + gts['mask'][j].sum() - intersection
-                iou = intersection / union
-                if iou >= iou_threshold:
-                    pred_match[i] = 1
-                    gt_match[j] = 1
-        return pred_match, gt_match
+    if n_gt == 0 or n_pred == 0:
+        return np.zeros(n_pred), np.zeros(n_gt)
+    
+    class_match_matrix = preds['label'][:,None] == gts['label'][None,:]
+    
+    pred_match = np.zeros(n_pred)
+    gt_match = np.zeros(n_gt)
+    
+    for i in sorted(range(n_pred),key=lambda x : - preds['score'][x]):
+        for j in range(n_gt):
+            if gt_match[j]:
+                continue
+            if not class_match_matrix[i,j]:
+                continue
+            intersection = (preds['mask'][i] * gts['mask'][j]).sum()
+            union = preds['mask'][i].sum() + gts['mask'][j].sum() - intersection
+            iou = intersection / union
+            if iou >= iou_threshold:
+                pred_match[i] = 1
+                gt_match[j] = 1
+    return pred_match, gt_match
+
+def get_instance_segmentation_metrics(all_gt,all_pred,iou_threshold = 0.5):
     
     iou_threshold = [iou_threshold for _ in range(len(all_gt))]
     blobs = list(zip(all_gt,all_pred,iou_threshold))
