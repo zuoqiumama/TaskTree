@@ -124,13 +124,31 @@ class Agent(BaseAgent):
         all_plans = [plans] + candidate_plans
         self.task_tree = build_task_tree(all_plans)
         
+        # Save initial state
+        start_pose = self.pose.copy()
+        # Initial 360 scan
         self.look_down()
         self.perceive()
-        self.rotate_left()
-        self.perceive()
-        self.rotate_left()
-        self.perceive()
-        self.rotate_left()
+        for _ in range(3):
+            self.rotate_left()
+            self.perceive()
+        # Exploration: Move to neighbors and scan
+        for move_act, rev_act in [('MoveAhead', 'MoveBack'), ('MoveLeft', 'MoveRight'), ('MoveRight', 'MoveLeft'), ('MoveBack', 'MoveAhead')]:
+            if self.step(move_act):
+                # Scan 360 at new position
+                for _ in range(4):
+                    self.step('RotateLeft')
+                # Return
+                self.step(rev_act)
+        # Ensure we are back at start
+        if self.pose[0] != start_pose[0] or self.pose[1] != start_pose[1]:
+             navigable = self.query_navigable_map()
+             while self.pose[0] != start_pose[0] or self.pose[1] != start_pose[1]:
+                 action = self.plan_step_to_waypoint(start_pose[:2], navigable)
+                 self.step(action)
+        # Restore rotation
+        while self.pose[2] != start_pose[2]:
+            self.step('RotateLeft')
         self.perceive()
         
         # TODO：遍历task tree执行任务

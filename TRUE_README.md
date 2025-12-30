@@ -143,7 +143,14 @@ python train/train_mrcnn.py \
     --epoch 17 --bz 2 --num_workers 64 --gpu 2 5 6 7
 
 # 正式训练
-python train/train_yolo.py --name train_yolo8 --model_config /home/cigit_lg/lzh/TaskTree/models/segmentation/yolo/yolov8-seg.yaml --gpu 2 4 5 6 --bz 4 --epoch 20 --num_workers 64
+python train/train_yolo.py \
+  --name train_yolov8l_640 \
+  --model_config /home/cigit_lg/lzh/TaskTree/models/segmentation/yolo/yolov8l-seg.yaml \
+  --image_size 640 \
+  --bz 4 \
+  --epoch 20 \
+  --num_workers 64 \
+  --gpu 2 4 5 6
 ```
 
 # 评估感知模型

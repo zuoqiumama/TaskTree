@@ -77,6 +77,8 @@ class Agent:
             print('!!!!!!!!!!!! Ctrl+C pressed. Exit !!!!!!!!!')
             exit(0)
         except Exception as e:
+            self.log(f"Error during run: {e}")
+            self.log(traceback.format_exc())
             pass
         
         result = self.evaluate_alfred_task()

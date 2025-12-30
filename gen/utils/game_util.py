@@ -302,6 +302,9 @@ def get_obj_of_type_closest_to_obj(object_type, ref_object_id, metadata):
 
 
 def get_objects_with_name_and_prop(name, prop, metadata):
+
+    if not name:
+        return []
     return [obj for obj in metadata['objects']
             if name in obj['objectId'] and obj[prop]]
 

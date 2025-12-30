@@ -224,10 +224,11 @@ class PickTwoObjAndPlaceTask(BaseTask):
             s += min(len([p for p in pickupables if 'Sliced' in p['objectId']]), 2)
 
         # placing each object counts as a goal_condition
-        s += min(np.max([sum([1 if r['receptacleObjectIds'] is not None
-                                   and p['objectId'] in r['receptacleObjectIds'] else 0
-                              for p in pickupables])
-                         for r in receptacles]), 2)
+        if len(receptacles) > 0:
+            s += min(np.max([sum([1 if r['receptacleObjectIds'] is not None
+                                    and p['objectId'] in r['receptacleObjectIds'] else 0
+                                for p in pickupables])
+                            for r in receptacles]), 2)
         return s, ts
 
     def reset(self):
